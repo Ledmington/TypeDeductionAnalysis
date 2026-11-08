@@ -21,8 +21,9 @@ using namespace tda;
 
 AnalysisKey TypeDeductionAnalysis::Key;
 
-TypeDeductionAnalysis::Result TypeDeductionAnalysis::run(Module& m, ModuleAnalysisManager&) {
+TypeDeductionAnalysis::Result TypeDeductionAnalysis::run(Module& m, ModuleAnalysisManager&, unsigned maxIterations) {
   LLVM_DEBUG(log().logln("[TypeDeductionAnalysis]", Logger::Magenta));
+  LLVM_DEBUG(log() << Logger::Blue << "[Max deduction iterations: " << maxIterations << "]\n" << Logger::Reset;);
   Result result;
 
   TypeDeductionAnalysisInfo::getInstance().initialize(m);
@@ -49,6 +50,11 @@ TypeDeductionAnalysis::Result TypeDeductionAnalysis::run(Module& m, ModuleAnalys
   // Continue deducing until a fix point is reached
   unsigned iterations = 0;
   while (changed) {
+    if (iterations >= maxIterations) {
+      errs() << "Warning: TypeDeductionAnalysis stopped after " << iterations
+             << " iterations without reaching a fixed point, deduced types may be incomplete\n";
+      break;
+    }
     LLVM_DEBUG(log() << Logger::Blue << "[Deduction iteration " << iterations << "]\n"
                      << Logger::Reset);
     iterations++;

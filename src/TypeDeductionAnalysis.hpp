@@ -21,7 +21,7 @@ public:
     llvm::DenseMap<llvm::Value*, TypeAliasSet> transparentTypes;
   };
 
-  Result run(llvm::Module& m, llvm::ModuleAnalysisManager&);
+  Result run(llvm::Module& m, llvm::ModuleAnalysisManager&, unsigned maxIterations = 999);
 
 private:
   std::list<llvm::Value*> deductionQueue;
