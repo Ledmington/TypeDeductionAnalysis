@@ -132,6 +132,10 @@ const TypeAliasSet& TypeDeductionAnalysis::updateDeducedTypes(Value* value,
   TypeAliasSet& typeAliasSet = deducedTypes[value];
   if (!deducedType)
     return typeAliasSet;
+  // Constants like `ptr null` are shared by all their uses: keep their initial type, or they would merge the types of
+  // unrelated values (e.g. different offsets of the same object memcpy-ed from `ptr null`, never reaching a fixed point)
+  if (isa<ConstantData>(value) && !typeAliasSet.empty())
+    return typeAliasSet;
 
   Logger& logger = log();
   auto indenter = logger.getIndenter();
