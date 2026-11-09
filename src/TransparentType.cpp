@@ -149,7 +149,7 @@ const TransparentType* TransparentType::findGepSrcElementType(const TransparentT
       return curr;
     if (curr->isArrayTT())
       curr = cast<TransparentArrayType>(curr)->getElementType();
-    else if (curr->isStructTT())
+    else if (curr->isStructTT() && cast<TransparentStructType>(curr)->getNumFieldTypes() > 0)
       curr = cast<TransparentStructType>(curr)->getFieldType(0);
     else
       curr = nullptr;
