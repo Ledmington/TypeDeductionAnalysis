@@ -236,6 +236,9 @@ TransparentType* TransparentType::getOrSetIndexedType(TransparentType* ptrOperan
           if (Type* currStructLLVMType = currStruct->getLLVMType())
             structLayout = dataLayout->getStructLayout(cast<StructType>(currStructLLVMType));
           unsigned numFields = currStruct->getNumFieldTypes();
+          if (numFields == 0) {
+            return nullptr;
+          }
           for (unsigned i = 0; i < numFields; i++) {
             TransparentType* fieldType = currStruct->getFieldType(i);
             unsigned fieldOffset = structLayout ? structLayout->getElementOffset(i) : currStruct->getFieldOffset(i);
