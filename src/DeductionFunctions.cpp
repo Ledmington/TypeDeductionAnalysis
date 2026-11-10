@@ -215,7 +215,8 @@ void TypeDeductionAnalysis::deduceFromGep(GetElementPtrInst* gep) {
 
     std::unique_ptr<TransparentType> ptrOpTypeMergedWithGep =
       ptrOperandType->cloneAndSetIndexedType(gepType->getPointedType(), srcElType.get(), gep->indices());
-    updateDeducedTypes(ptrOperand, std::move(ptrOpTypeMergedWithGep));
+    if (ptrOpTypeMergedWithGep && ptrOperandType->isCompatibleWith(ptrOpTypeMergedWithGep.get()))
+      updateDeducedTypes(ptrOperand, std::move(ptrOpTypeMergedWithGep));
 
     updateDeducedTypes(ptrOperand, std::move(srcElPtrType));
   };
