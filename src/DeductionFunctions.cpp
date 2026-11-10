@@ -2,7 +2,9 @@
 #include "TDAInfo/TBAAParser.hpp"
 #include "TypeDeductionAnalysis.hpp"
 
+#include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/Module.h>
 
 #define DEBUG_TYPE "tda"
 
@@ -11,6 +13,21 @@ using namespace tda;
 
 static bool isMetadata(const Value* value) {
   return value && (value->getType()->isMetadataTy() || isa<MetadataAsValue>(value));
+}
+
+static std::optional<uint64_t> getSizeInBytes(const TransparentType* type, const DataLayout& dataLayout) {
+  if (!type || type->isPlaceholder() || !type->getLLVMType())
+    return std::nullopt;
+  // The LLVM type of an array is the original one: its element type may have been deduced since
+  if (const auto* arrayType = dyn_cast<TransparentArrayType>(type)) {
+    std::optional<uint64_t> elementSize = getSizeInBytes(arrayType->getElementType(), dataLayout);
+    if (!elementSize)
+      return std::nullopt;
+    return *elementSize * arrayType->getNumElements();
+  }
+  if (!type->getLLVMType()->isSized())
+    return std::nullopt;
+  return dataLayout.getTypeAllocSize(type->getLLVMType()).getFixedValue();
 }
 
 static bool isToSkip(const Value* value) {
@@ -244,8 +261,34 @@ void TypeDeductionAnalysis::deduceFromSupportedIntrinsicCall(CallBase* call) {
   Function* intrinsicFun = call->getCalledFunction();
   assert(intrinsicFun && intrinsicFun->isIntrinsic());
   Intrinsic::ID id = intrinsicFun->getIntrinsicID();
-  if (id == Intrinsic::memcpy || id == Intrinsic::memmove)
-    mergeTypeAliasSets(call->getArgOperand(0), call->getArgOperand(1));
+  if (id != Intrinsic::memcpy && id != Intrinsic::memmove)
+    return;
+  Value* dst = call->getArgOperand(0);
+  Value* src = call->getArgOperand(1);
+  auto* length = dyn_cast<ConstantInt>(call->getArgOperand(2));
+  if (!length) {
+    mergeTypeAliasSets(dst, src);
+    return;
+  }
+
+  // Copying N bytes only tells that the first N bytes of dst and src have the same type: merge only pointed types of
+  // exactly N bytes, or partial copies (e.g. of an enum's fields into another enum) would merge the types of different
+  // objects, nesting them indefinitely
+  const DataLayout& dataLayout = call->getModule()->getDataLayout();
+  auto hasCopiedSize = [&](const TransparentType* ptrType) {
+    std::optional<uint64_t> size = getSizeInBytes(ptrType->getPointedType(), dataLayout);
+    return !size || *size == length->getZExtValue();
+  };
+  const TypeAliasSet dstTypes = getOrCreateDeducedTypes(dst);
+  const TypeAliasSet srcTypes = getOrCreateDeducedTypes(src);
+  for (const auto& dstType : dstTypes) {
+    for (const auto& srcType : srcTypes) {
+      if (hasCopiedSize(dstType.get()) && hasCopiedSize(srcType.get())) {
+        updateDeducedTypes(dst, srcType->clone());
+        updateDeducedTypes(src, dstType->clone());
+      }
+    }
+  }
 }
 
 void TypeDeductionAnalysis::mergeTypeAliasSets(Value* value1, Value* value2) {
