@@ -215,7 +215,15 @@ void TypeDeductionAnalysis::deduceFromGep(GetElementPtrInst* gep) {
 
     std::unique_ptr<TransparentType> ptrOpTypeMergedWithGep =
       ptrOperandType->cloneAndSetIndexedType(gepType->getPointedType(), srcElType.get(), gep->indices());
-    if (ptrOpTypeMergedWithGep && ptrOperandType->isCompatibleWith(ptrOpTypeMergedWithGep.get()))
+    // Only refine the opaque pointers of a type the pointer operand already has: keep its shape (an array is compatible
+    // with its element type, so arrays would nest once per iteration) and never add a new alias (the alias sets would
+    // grow with all the combinations of the types of its fields)
+    if (ptrOpTypeMergedWithGep && ptrOperandType->isCompatibleWith(ptrOpTypeMergedWithGep.get())
+        && (!ptrOperandType->getPointedType()
+            || ptrOperandType->getPointedType()->isStructurallyEquivalent(ptrOpTypeMergedWithGep->getPointedType()))
+        && std::ranges::any_of(deducedTypes[ptrOperand], [&](const auto& type) {
+             return type->isCompatibleWith(ptrOpTypeMergedWithGep.get());
+           }))
       updateDeducedTypes(ptrOperand, std::move(ptrOpTypeMergedWithGep));
 
     updateDeducedTypes(ptrOperand, std::move(srcElPtrType));
