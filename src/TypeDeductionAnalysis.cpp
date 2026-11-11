@@ -133,8 +133,11 @@ const TypeAliasSet& TypeDeductionAnalysis::updateDeducedTypes(Value* value,
   if (!deducedType)
     return typeAliasSet;
   // Constants like `ptr null` are shared by all their uses: keep their initial type, or they would merge the types of
-  // unrelated values (e.g. different offsets of the same object memcpy-ed from `ptr null`, never reaching a fixed point)
-  if (isa<ConstantData>(value) && !typeAliasSet.empty())
+  // unrelated values (e.g. different offsets of the same object memcpy-ed from `ptr null`, never reaching a fixed point).
+  // The same holds for addresses made from integers, like Rust's dangling pointers `inttoptr (i64 1 to ptr)`
+  auto* constExpr = dyn_cast<ConstantExpr>(value);
+  bool isAddressFromInt = constExpr && constExpr->getOpcode() == Instruction::IntToPtr;
+  if ((isa<ConstantData>(value) || isAddressFromInt) && !typeAliasSet.empty())
     return typeAliasSet;
 
   Logger& logger = log();
